@@ -221,32 +221,60 @@ function viewUser(id){
 function switchToEdit(id){var m=bootstrap.Modal.getInstance(document.getElementById('detailModal'));if(m)m.hide();setTimeout(function(){editUser(id);},350);}
 
 function editUser(id){
-  var o=null;for(var i=0;i<allOfficers.length;i++){if(allOfficers[i].id===id){o=allOfficers[i];break;}}
+  var o=null;
+  for(var i=0;i<allOfficers.length;i++){if(allOfficers[i].id===id){o=allOfficers[i];break;}}
+  if(!o) return;
+
+  // Populate org dropdown
   var oh='<option value="">-- None --</option>';
-  for(var i=0;i<allOrgs.length;i++) oh+='<option value="'+allOrgs[i].id+'"'+(o&&o.org_id===allOrgs[i].id?' selected':'')+'>'+esc(allOrgs[i].name)+'</option>';
+  for(var i=0;i<allOrgs.length;i++){
+    oh+='<option value="'+allOrgs[i].id+'"'+(o.org_id===allOrgs[i].id?' selected':'')+'>'+esc(allOrgs[i].name)+'</option>';
+  }
+  // Populate zone dropdown
   var zh='<option value="">-- No Zone --</option>';
-  for(var i=0;i<allZones.length;i++) zh+='<option value="'+allZones[i].id+'"'+(o&&o.zone_id===allZones[i].id?' selected':'')+'>'+esc(allZones[i].name)+'</option>';
-  var roleLabel2=o?( o.role==='supervisor'?'Supervisor':o.role==='user'?'Field User':o.role||'?' ):'?';
-  var rc2=o?(roleColors[o.role]||'var(--cyan)'):'var(--cyan)';
-  document.getElementById('detailTitle').textContent='EDIT USER — '+roleLabel2.toUpperCase();
-  document.getElementById('detailBody').innerHTML=
-    '<div class="mb-3 p-2" style="background:rgba(0,0,0,.2);border-radius:6px;display:flex;align-items:center;gap:10px">'+
-    '<span style="font-size:11px;color:var(--textdim)">Current Role:</span>'+
-    '<span style="font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid '+rc2+';color:'+rc2+';font-weight:600">'+roleLabel2.toUpperCase()+'</span>'+
-    '</div>'+
-    '<div class="row g-3">'+
-    <div class="col-md-6"><label class="form-label">Full Name</label><input id="e-name" class="form-control" value="'+esc(o?o.full_name||'':'')+'"></div>'+
-    '<div class="col-md-6"><label class="form-label">Role</label><select id="e-role" class="form-select"><option value="user"'+(o&&o.role==='user'?' selected':'')+'>Field User</option><option value="supervisor"'+(o&&o.role==='supervisor'?' selected':'')+'>Supervisor</option></select></div>'+
-    '<div class="col-md-6"><label class="form-label">Phone</label><input id="e-phone" class="form-control" value="'+esc(o?o.phone||'':'')+'"></div>'+
-    '<div class="col-md-6"><label class="form-label">Employee ID</label><input id="e-emp" class="form-control" value="'+esc(o?o.employee_id||'':'')+'"></div>'+
-    '<div class="col-md-6"><label class="form-label">Organisation</label><select id="e-org" class="form-select">'+oh+'</select></div>'+
-    '<div class="col-md-6"><label class="form-label">Assigned Zone</label><select id="e-zone" class="form-select">'+zh+'</select></div>'+
-    '<div class="col-md-6"><label class="form-label">Status</label><select id="e-active" class="form-select"><option value="1"'+(o&&o.is_active?' selected':'')+'>Active</option><option value="0"'+(o&&!o.is_active?' selected':'')+'>Inactive</option></select></div>'+
-    '</div>';
-  document.getElementById('detailFooter').innerHTML=
-    '<button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>'+
-    '<button class="btn btn-danger btn-sm me-auto" type="button" onclick="deactivateUser('+id+')">Deactivate</button>'+
-    '<button class="btn btn-primary" type="button" onclick="saveUser('+id+')">Save</button>';
+  for(var i=0;i<allZones.length;i++){
+    zh+='<option value="'+allZones[i].id+'"'+(o.zone_id===allZones[i].id?' selected':'')+'>'+esc(allZones[i].name)+'</option>';
+  }
+
+  var roleColor=roleColors[o.role]||'var(--cyan)';
+  var roleLabel=o.role==='supervisor'?'Supervisor':o.role==='user'?'Field User':o.role||'?';
+
+  document.getElementById('detailTitle').textContent='EDIT USER';
+  document.getElementById('detailBody').innerHTML=[
+    '<div class="mb-3 p-2 d-flex align-items-center gap-2" style="background:rgba(0,0,0,.2);border-radius:6px">',
+      '<span style="font-size:11px;color:var(--textdim)">Role:</span>',
+      '<span style="font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid '+roleColor+';color:'+roleColor+';font-weight:600">'+roleLabel.toUpperCase()+'</span>',
+    '</div>',
+    '<div class="row g-3">',
+      '<div class="col-md-6"><label class="form-label">Full Name</label>',
+        '<input id="e-name" class="form-control" value="'+esc(o.full_name||'')+'"></div>',
+      '<div class="col-md-6"><label class="form-label">Role</label>',
+        '<select id="e-role" class="form-select">',
+          '<option value="user"'+(o.role==='user'?' selected':'')+'>Field User</option>',
+          '<option value="supervisor"'+(o.role==='supervisor'?' selected':'')+'>Supervisor</option>',
+        '</select></div>',
+      '<div class="col-md-6"><label class="form-label">Phone</label>',
+        '<input id="e-phone" class="form-control" value="'+esc(o.phone||'')+'"></div>',
+      '<div class="col-md-6"><label class="form-label">Employee ID</label>',
+        '<input id="e-emp" class="form-control" value="'+esc(o.employee_id||'')+'"></div>',
+      '<div class="col-md-6"><label class="form-label">Organisation</label>',
+        '<select id="e-org" class="form-select">'+oh+'</select></div>',
+      '<div class="col-md-6"><label class="form-label">Assigned Zone</label>',
+        '<select id="e-zone" class="form-select">'+zh+'</select></div>',
+      '<div class="col-md-6"><label class="form-label">Status</label>',
+        '<select id="e-active" class="form-select">',
+          '<option value="1"'+(o.is_active?' selected':'')+'>Active</option>',
+          '<option value="0"'+(!o.is_active?' selected':'')+'>Inactive</option>',
+        '</select></div>',
+    '</div>'
+  ].join('');
+
+  document.getElementById('detailFooter').innerHTML=[
+    '<button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>',
+    '<button class="btn btn-danger btn-sm me-auto" type="button" onclick="deactivateUser('+id+')">Deactivate</button>',
+    '<button class="btn btn-primary" type="button" onclick="saveUser('+id+')">Save</button>'
+  ].join('');
+
   new bootstrap.Modal(document.getElementById('detailModal')).show();
 }
 
