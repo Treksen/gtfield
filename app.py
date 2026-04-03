@@ -105,7 +105,17 @@ def execute_returning(sql, args=()):
     """INSERT ... RETURNING id — works on both backends."""
     db = get_db()
     if USE_POSTGRES:
+        import re as _re
         sql = sql.replace('?', '%s')
+        sql = sql.replace("datetime('now')", "NOW()")
+        sql = sql.replace("date('now')", "CURRENT_DATE")
+        sql = sql.replace('AUTOINCREMENT', '')
+        def _fix_iv(m):
+            n, unit = m.group(1), m.group(2)
+            return ("NOW() - INTERVAL '" + n.lstrip('-') + " " + unit + "'"
+                    if n.startswith('-')
+                    else "NOW() + INTERVAL '" + n + " " + unit + "'")
+        sql = _re.sub(r"datetime\('now',\s*'(-?\d+)\s+(days?|hours?|minutes?)'\)", _fix_iv, sql)
         if 'RETURNING' not in sql.upper():
             sql += ' RETURNING id'
         with db.cursor() as cur:
@@ -598,10 +608,13 @@ def api_login():
         return jsonify({'error': 'Invalid email or password'}), 401
     session['user_id']   = u['id']
     session['user_role'] = u['role']
-    # Mark user as online
-    execute("""INSERT INTO officer_locations (officer_id,latitude,longitude,status,updated_at)
-               VALUES (?,0,0,'online',datetime('now'))
-               ON CONFLICT(officer_id) DO UPDATE SET status='online',updated_at=datetime('now')""", [u['id']])
+    # Mark user as online (non-fatal)
+    try:
+        execute("""INSERT INTO officer_locations (officer_id,latitude,longitude,status,updated_at)
+                   VALUES (?,0,0,'online',datetime('now'))
+                   ON CONFLICT(officer_id) DO UPDATE SET status='online',updated_at=datetime('now')""", [u['id']])
+    except Exception as e:
+        print(f"Login location error: {e}")
     return jsonify({'user': {'id': u['id'], 'full_name': u['full_name'],
                              'email': u['email'], 'role': u['role'],
                              'org_id': u['org_id'], 'org_name': u['org_name']}})
@@ -617,11 +630,15 @@ def api_logout():
 @app.route('/api/auth/heartbeat', methods=['POST'])
 @login_required()
 def api_heartbeat():
-    """Called every 60s from browser to keep status=online. Marks offline if not seen for 3 min."""
-    execute("""INSERT INTO officer_locations (officer_id,latitude,longitude,status,updated_at)
-               VALUES (?,0,0,'online',datetime('now'))
-               ON CONFLICT(officer_id) DO UPDATE SET status='online',updated_at=datetime('now')""",
-            [session['user_id']])
+    """Called every 60s from browser to keep status=online."""
+    try:
+        execute("""INSERT INTO officer_locations (officer_id,latitude,longitude,status,updated_at)
+                   VALUES (?,0,0,'online',datetime('now'))
+                   ON CONFLICT(officer_id) DO UPDATE SET status='online',updated_at=datetime('now')""",
+                [session['user_id']])
+    except Exception as e:
+        print(f"Heartbeat error: {e}")
+        return jsonify({'ok': True, 'warning': str(e)})
     return jsonify({'ok': True})
 
 @app.route('/api/auth/me')
@@ -872,7 +889,9 @@ def api_zones():
             LEFT JOIN users u ON u.id=z.created_by
             LEFT JOIN organizations o ON o.id=z.org_id
             LEFT JOIN zone_assignments za ON za.zone_id=z.id
-            WHERE z.is_active=1 GROUP BY z.id ORDER BY z.name
+            WHERE z.is_active=1
+            GROUP BY z.id, z.name, z.sub_county, z.ward, z.description, z.target_households, z.color, z.bbox_north, z.bbox_south, z.bbox_east, z.bbox_west, z.is_active, z.org_id, z.created_by, z.created_at, u.full_name, o.name
+            ORDER BY z.name
         """)
     elif u['role'] == 'supervisor':
         rows = query("""
@@ -884,7 +903,8 @@ def api_zones():
             LEFT JOIN organizations o ON o.id=z.org_id
             LEFT JOIN zone_assignments za ON za.zone_id=z.id
             WHERE z.is_active=1 AND (z.org_id=? OR z.org_id IS NULL)
-            GROUP BY z.id ORDER BY z.name
+            GROUP BY z.id, z.name, z.sub_county, z.ward, z.description, z.target_households, z.color, z.bbox_north, z.bbox_south, z.bbox_east, z.bbox_west, z.is_active, z.org_id, z.created_by, z.created_at, u.full_name, o.name
+            ORDER BY z.name
         """, [u.get('org_id') or 0])
     else:
         # Users only see zones of their org
@@ -1390,8 +1410,11 @@ def api_read_alert(aid):
 @login_required(roles=['admin', 'supervisor'])
 def api_dashboard_summary():
     # Auto-mark users offline if no heartbeat for 3 minutes
-    execute("""UPDATE officer_locations SET status='offline'
-               WHERE status='online' AND updated_at < datetime('now','-3 minutes')""")
+    try:
+        execute("""UPDATE officer_locations SET status='offline'
+                   WHERE status='online' AND updated_at < datetime('now','-3 minutes')""")
+    except Exception as e:
+        print(f"Auto-offline error: {e}")
     u = current_user()
     users = query("""
         SELECT COUNT(*) as total,
@@ -1452,7 +1475,8 @@ def api_report_daily():
         LEFT JOIN form_submissions fs ON fs.officer_id=u.id
         LEFT JOIN officer_locations ol ON ol.officer_id=u.id
         WHERE u.role IN ('user','supervisor') AND u.is_active=1
-        GROUP BY u.id ORDER BY submissions DESC
+        GROUP BY u.id, u.full_name, u.employee_id, u.org_name, u.role, ol.status, ol.updated_at
+        ORDER BY submissions DESC
     """, [date])
     return jsonify({'date': date, 'officers': rows})
 
@@ -1482,7 +1506,9 @@ def api_report_zones():
         FROM zones z
         LEFT JOIN zone_assignments za ON za.zone_id=z.id
         LEFT JOIN form_submissions fs ON fs.zone_id=z.id
-        WHERE z.is_active=1 GROUP BY z.id ORDER BY z.name
+        WHERE z.is_active=1
+        GROUP BY z.id, z.name, z.sub_county, z.ward, z.target_households, z.color
+        ORDER BY z.name
     """, [date])
     return jsonify(rows)
 
