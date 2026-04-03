@@ -51,6 +51,12 @@ def query(sql, args=(), one=False):
         sql = sql.replace('?', '%s')
         sql = sql.replace("datetime('now')", "NOW()")
         sql = sql.replace("date('now')", "CURRENT_DATE")
+        # Convert remaining date(column) -> DATE(column) for PostgreSQL
+        # Must run AFTER date('now') is already replaced
+        sql = _re.sub(r'(?i)\bdate\(([^)]+)\)', lambda m: 'DATE(' + m.group(1) + ')', sql)
+        # Clean up any double-wrapping
+        sql = sql.replace("DATE(CURRENT_DATE)", "CURRENT_DATE")
+        sql = sql.replace("DATE(NOW())", "NOW()")
         # Convert SQLite interval syntax to PostgreSQL
         # datetime('now','-N days/hours/minutes') -> NOW() - INTERVAL 'N days/hours/minutes'
         def _fix_interval(m):
@@ -80,6 +86,10 @@ def execute(sql, args=()):
         sql = sql.replace("datetime('now')", "NOW()")
         sql = sql.replace("date('now')", "CURRENT_DATE")
         sql = sql.replace('AUTOINCREMENT', '')
+        # Convert remaining date(column) -> DATE(column) for PostgreSQL
+        sql = _re.sub(r'(?i)\bdate\(([^)]+)\)', lambda m: 'DATE(' + m.group(1) + ')', sql)
+        sql = sql.replace("DATE(CURRENT_DATE)", "CURRENT_DATE")
+        sql = sql.replace("DATE(NOW())", "NOW()")
         def _fix_interval(m):
             n, unit = m.group(1), m.group(2)
             if n.startswith('-'):
@@ -110,6 +120,10 @@ def execute_returning(sql, args=()):
         sql = sql.replace("datetime('now')", "NOW()")
         sql = sql.replace("date('now')", "CURRENT_DATE")
         sql = sql.replace('AUTOINCREMENT', '')
+        # Convert remaining date(column) -> DATE(column) for PostgreSQL
+        sql = _re.sub(r'(?i)\bdate\(([^)]+)\)', lambda m: 'DATE(' + m.group(1) + ')', sql)
+        sql = sql.replace("DATE(CURRENT_DATE)", "CURRENT_DATE")
+        sql = sql.replace("DATE(NOW())", "NOW()")
         def _fix_iv(m):
             n, unit = m.group(1), m.group(2)
             return ("NOW() - INTERVAL '" + n.lstrip('-') + " " + unit + "'"
