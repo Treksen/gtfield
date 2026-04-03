@@ -842,16 +842,17 @@ def api_officers():
                 WHERE s.officer_id=u.id
                 AND date(s.submitted_at)=date('now')
                 AND s.status='sent') as visits_today,
-               (SELECT z2.name FROM zone_assignments za2
-                JOIN zones z2 ON z2.id=za2.zone_id
-                WHERE za2.officer_id=u.id
-                ORDER BY za2.created_at LIMIT 1) as zone_name,
-               (SELECT za3.zone_id FROM zone_assignments za3
-                WHERE za3.officer_id=u.id
-                ORDER BY za3.created_at LIMIT 1) as zone_id
+               zn.name as zone_name,
+               za_min.zone_id as zone_id
         FROM users u
         LEFT JOIN officer_locations ol ON ol.officer_id=u.id
         LEFT JOIN organizations og ON og.id=u.org_id
+        LEFT JOIN (
+            SELECT officer_id, MIN(zone_id) as zone_id
+            FROM zone_assignments
+            GROUP BY officer_id
+        ) za_min ON za_min.officer_id=u.id
+        LEFT JOIN zones zn ON zn.id=za_min.zone_id
         WHERE u.role IN ('user','supervisor') AND u.is_active=1
         ORDER BY u.role, u.full_name
     """)
