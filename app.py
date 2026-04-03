@@ -66,11 +66,21 @@ def query(sql, args=(), one=False):
             return "NOW() + INTERVAL '" + n + " " + unit + "'"
         import re as _re2
         sql = _re2.sub(r"datetime\('now',\s*'(-?\d+)\s+(days?|hours?|minutes?)'\)", _fix_interval, sql)
-        with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, args)
-            rv = cur.fetchall()
-        rows = [dict(r) for r in rv]
-        return (rows[0] if rows else None) if one else rows
+        try:
+            with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql, args)
+                rv = cur.fetchall()
+            rows = [dict(r) for r in rv]
+            return (rows[0] if rows else None) if one else rows
+        except Exception as pg_err:
+            db.rollback()
+            import traceback
+            print("=== PostgreSQL query ERROR ===")
+            print("SQL:", sql[:500])
+            print("ARGS:", args[:5] if args else [])
+            print("ERROR:", str(pg_err))
+            traceback.print_exc()
+            raise
     else:
         cur = db.execute(sql, args)
         rv = cur.fetchall()
@@ -97,15 +107,23 @@ def execute(sql, args=()):
             return "NOW() + INTERVAL '" + n + " " + unit + "'"
         import re as _re2
         sql = _re2.sub(r"datetime\('now',\s*'(-?\d+)\s+(days?|hours?|minutes?)'\)", _fix_interval, sql)
-        with db.cursor() as cur:
-            cur.execute(sql, args)
-            try:
-                lid = cur.fetchone()
-                db.commit()
-                return lid[0] if lid else None
-            except Exception:
-                db.commit()
-                return None
+        try:
+            with db.cursor() as cur:
+                cur.execute(sql, args)
+                try:
+                    lid = cur.fetchone()
+                    db.commit()
+                    return lid[0] if lid else None
+                except Exception:
+                    db.commit()
+                    return None
+        except Exception as pg_err:
+            try: db.rollback()
+            except: pass
+            print("=== PostgreSQL execute ERROR ===")
+            print("SQL:", sql[:500])
+            print("ERROR:", str(pg_err))
+            raise
     else:
         cur = db.execute(sql, args)
         db.commit()
