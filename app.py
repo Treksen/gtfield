@@ -833,17 +833,22 @@ def api_admin_delete_user(uid):
 def api_officers():
     rows = query("""
         SELECT u.id, u.full_name, u.email, u.phone, u.employee_id,
+               u.role,
                COALESCE(og.name, u.org_name, '—') as org_name,
                u.is_active, u.created_at, u.org_id,
                ol.status as location_status, ol.battery_pct,
                ol.updated_at as last_seen, ol.latitude, ol.longitude,
                (SELECT COUNT(*) FROM form_submissions s
-                WHERE s.officer_id=u.id AND date(s.submitted_at)=date('now')
+                WHERE s.officer_id=u.id
+                AND date(s.submitted_at)=date('now')
                 AND s.status='sent') as visits_today,
-               (SELECT z.name FROM zone_assignments za
-                JOIN zones z ON z.id=za.zone_id
-                WHERE za.officer_id=u.id LIMIT 1) as zone_name,
-               (SELECT za.zone_id FROM zone_assignments za WHERE za.officer_id=u.id LIMIT 1) as zone_id
+               (SELECT z2.name FROM zone_assignments za2
+                JOIN zones z2 ON z2.id=za2.zone_id
+                WHERE za2.officer_id=u.id
+                ORDER BY za2.created_at LIMIT 1) as zone_name,
+               (SELECT za3.zone_id FROM zone_assignments za3
+                WHERE za3.officer_id=u.id
+                ORDER BY za3.created_at LIMIT 1) as zone_id
         FROM users u
         LEFT JOIN officer_locations ol ON ol.officer_id=u.id
         LEFT JOIN organizations og ON og.id=u.org_id

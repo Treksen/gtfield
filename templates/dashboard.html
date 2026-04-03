@@ -15,45 +15,6 @@
   .dash-right{padding:12px;}
 }
 </style>
-<style>
-  :root {
-    --surface: #0f172a;
-    --surface2: #1e293b;
-    --border: #334155;
-    --text: #e2e8f0;
-    --textdim: #94a3b8;
-    --cyan: #22d3ee;
-    --amber: #f59e0b;
-  }
-
-  body {
-    background: #020617;
-    color: var(--text);
-  }
-
-  /* TABLE FIX */
-  .table {
-    background: var(--surface);
-    color: var(--text);
-    border: 1px solid var(--border);
-  }
-
-  .table th {
-    background: var(--surface2);
-    color: var(--textdim);
-    font-size: 11px;
-    text-transform: uppercase;
-  }
-
-  .table td {
-    background: transparent !important;
-    border-color: var(--text);
-  }
-
-  .table tbody tr:hover {
-    background: var(--surface2);
-  }
-</style>
 {% endblock %}
 {% block content %}
 
@@ -164,7 +125,6 @@ async function loadDashboard() {
         ph+='<div style="font-size:13px;font-weight:500;margin-bottom:2px">'+esc(f.title)+'</div>';
         ph+='<div style="font-size:11px;color:var(--textdim);margin-bottom:8px">'+esc(f.org_name_display||'No org')+' · '+esc(f.category||'general')+'</div>';
         ph+='<div class="d-flex gap-2">';
-        ph+='<a href="/forms" class="btn btn-secondary btn-sm" onclick="closeNotifications()"><i class="bi bi-eye me-1"></i>View Form</a>';
         ph+='<button class="btn btn-success btn-sm flex-fill" type="button" onclick="approveForm('+f.id+')"><i class="bi bi-check me-1"></i>Approve</button>';
         ph+='<button class="btn btn-danger btn-sm" type="button" onclick="rejectPrompt('+f.id+')"><i class="bi bi-x"></i></button>';
         ph+='</div></div>';
@@ -223,11 +183,9 @@ async function loadDashboard() {
         ur+='<tr>';
         ur+='<td><div class="d-flex align-items-center gap-2">';
         ur+='<div style="width:26px;height:26px;background:var(--cyan);color:#000;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:10px;font-weight:700;flex-shrink:0">'+ini+'</div>';
-        ur+='<div><div style="font-size:13px;color:var(--textdim); font-weight:500;white-space:nowrap">'+esc(o.full_name||'')+'</div>';
+        ur+='<div><div style="font-size:13px;font-weight:500;white-space:nowrap">'+esc(o.full_name||'')+'</div>';
         ur+='<div style="font-size:10px;color:var(--textdim)">'+esc(o.employee_id||'')+'</div></div></div></td>';
-        var rc2=o.role==='supervisor'?'var(--amber)':'var(--cyan)';
-        ur+='<td><span style="font-family:monospace;font-size:9px;padding:2px 5px;border-radius:3px;border:1px solid '+rc2+'40;color:'+rc2+'">'+(o.role||'user').toUpperCase()+'</span></td>';
-        ur+='<td class="hide-xs" style="font-size:12px;color:var(--textdim)">'+esc(o.org_name||'—')+'</td>';
+        var rc2=o.role==='supervisor'?'var(--amber)':o.role==='admin'?'var(--red)':'var(--cyan)';ur+='<td><span style="font-family:monospace;font-size:9px;padding:2px 5px;border-radius:3px;border:1px solid '+rc2+';color:'+rc2+';background:'+rc2+'22;font-weight:700">'+(o.role||'user').toUpperCase()+'</span></td>';ur+='<td class="hide-xs" style="font-size:12px;color:var(--textdim)">'+esc(o.org_name||'—')+'</td>';
         ur+='<td>'+statusBadge(o.location_status)+'</td>';
         ur+='<td style="font-family:var(--mono);color:var(--amber)">'+(o.visits_today||0)+'</td>';
         ur+='<td class="hide-xs" style="font-size:11px;color:var(--textdim)">'+fmtRelative(o.last_seen)+'</td>';
