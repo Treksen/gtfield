@@ -58,10 +58,76 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 /* ── CARDS, TABLES, FORMS ── */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);}
 .card-header{background:var(--surface2);border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--textdim);padding:10px 14px;}
-.table{color:var(--#000);}
-.table thead th{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--textdim);border-color:var(--border);background:var(--surface2);}
-.table tbody td{border-color:var(--border);vertical-align:middle;font-size:13px;}
-.table tbody tr:hover td{background:var(--text);}
+/* ── TABLE — override ALL Bootstrap 5 table vars ── */
+.table{
+  color:var(--text)!important;
+  --bs-table-bg:var(--surface)!important;
+  --bs-table-color:var(--text)!important;
+  --bs-table-border-color:var(--border)!important;
+  --bs-table-striped-bg:var(--surface2)!important;
+  --bs-table-striped-color:var(--text)!important;
+  --bs-table-hover-bg:var(--surface2)!important;
+  --bs-table-hover-color:var(--text)!important;
+  --bs-table-active-bg:var(--surface2)!important;
+  --bs-table-active-color:var(--text)!important;
+  border-color:var(--border)!important;
+}
+.table > :not(caption) > * > *{
+  background-color:var(--surface)!important;
+  color:var(--text)!important;
+  border-color:var(--border)!important;
+  box-shadow:none!important;
+}
+.table thead > tr > *{
+  background-color:var(--surface2)!important;
+  color:var(--textdim)!important;
+  font-family:var(--mono);
+  font-size:10px;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+  border-color:var(--border)!important;
+  font-weight:600;
+}
+.table tbody > tr > td{
+  background-color:var(--surface)!important;
+  color:var(--text)!important;
+  border-color:var(--border)!important;
+  vertical-align:middle;
+  font-size:13px;
+}
+.table tbody > tr:hover > td{
+  background-color:var(--surface2)!important;
+  color:var(--text)!important;
+}
+.table-hover > tbody > tr:hover > *{
+  background-color:var(--surface2)!important;
+  color:var(--text)!important;
+  --bs-table-accent-bg:var(--surface2)!important;
+}
+/* Card and modal backgrounds */
+.card,.modal-content{background:var(--surface)!important;color:var(--text)!important;}
+.card-header{background:var(--surface2)!important;color:var(--textdim)!important;}
+.card-body{background:var(--surface)!important;color:var(--text)!important;}
+/* Dropdown */
+.dropdown-menu{background:var(--surface)!important;border:1px solid var(--border)!important;}
+.dropdown-item{color:var(--text)!important;}
+.dropdown-item:hover,.dropdown-item:focus{background:var(--surface2)!important;color:var(--amber)!important;}
+/* Modal */
+.modal-header,.modal-footer{border-color:var(--border)!important;}
+.modal-body{background:var(--surface)!important;}
+/* Form controls */
+.form-control,.form-select,.input-group-text{
+  background-color:var(--bg)!important;
+  border-color:var(--border)!important;
+  color:var(--text)!important;
+}
+.form-select option{background:var(--surface);color:var(--text);}
+/* Input group */
+.input-group-text{background:var(--surface2)!important;color:var(--textdim)!important;}
+/* Spinner */
+.spinner-border{color:var(--amber)!important;}
+/* Alerts/badges remain themed */
+.alert{background:var(--surface2)!important;border-color:var(--border)!important;color:var(--text)!important;}
 .form-control,.form-select{background:var(--bg)!important;border:1px solid var(--border)!important;color:var(--text)!important;font-size:14px;}
 .form-control:focus,.form-select:focus{border-color:var(--amber)!important;box-shadow:0 0 0 2px rgba(240,165,0,.15)!important;}
 .form-control::placeholder{color:var(--textdim)!important;}
