@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% set active = 'forms' %}
+{% block title %}Forms – FieldOps{% endblock %}
+{% block content %}
+<div class="page-header d-flex align-items-center justify-content-between">
+  <div>
+    <h5 class="mb-0" style="color:#e8f4ff"><i class="bi bi-ui-checks me-2" style="color:var(--amber)"></i>Form Management</h5>
+    <small style="color:var(--textdim)">Create and manage data collection forms</small>
+  </div>
+  <div class="d-flex gap-2">
+    {% if user.role in ('admin','supervisor') %}
+    <a href="/forms/builder" class="btn btn-primary btn-sm"><i class="bi bi-plus me-1"></i>Build Form</a>
+    {% endif %}
+  </div>
+  <button class="btn btn-secondary btn-sm ms-auto" type="button" onclick="load()"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</button>
+</div>
+
+<div class="p-3">
+  <!-- Status filter tabs -->
+  <div class="d-flex gap-2 mb-3 flex-wrap">
+    <button class="tab-btn active" onclick="filterStatus('all',this)">All</button>
+    <button class="tab-btn" onclick="filterStatus('approved',this)">✅ Approved</button>
+    <button class="tab-btn" onclick="filterStatus('pending_approval',this)">⏳ Pending</button>
+    <button class="tab-btn" onclick="filterStatus('rejected',this)">❌ Rejected</button>
+    <button class="tab-btn" onclick="filterStatus('archived',this)">🗃️ Archived</button>
+  </div>
+  <div id="formGrid" class="row g-3"></div>
+</div>
+
+<style>
+.tab-btn{font-family:var(--mono);font-size:11px;letter-spacing:.06em;padding:5px 14px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--textdim);cursor:pointer;transition:.15s;}
+.tab-btn.active{background:var(--amber);border-color:var(--amber);color:#000;font-weight:700;}
+</style>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const USER_ROLE = "{{ user.role }}";
+let forms = [];
+let activeStatus = 'all';
+
+async function load() {
+  forms = await api('GET', '/api/forms');
+  render();
+}
+
+function filterStatus(s, btn) {
+  activeStatus = s;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function render() {
+  let filtered = activeStatus === 'all' ? forms : forms.filter(f=>f.status===activeStatus);
+  const grid = document.getElementById('formGrid');
+  if (!filtered.length) {
+    grid.innerHTML = `<div class="col-12 text-center py-5" style="color:var(--textdim)">
+      <i class="bi bi-ui-checks" style="font-size:2.5rem"></i>
+      <p class="mt-2">No forms found.</p>
+      ${USER_ROLE!=='user'?'<a href="/forms/builder" class="btn btn-primary btn-sm">Build a Form</a>':''}
+    </div>`;
+    return;
+  }
+  grid.innerHTML = filtered.map(f => {
+    const color  = CAT_COLORS[f.category] || '#f0a500';
+    const icon   = CAT_ICONS[f.category]  || '📄';
+    const isMine = f.created_by_id === parseInt("{{ user.id }}");
+    return `<div class="col-md-6 col-lg-4">
+      <div class="card h-100" style="border-top:3px solid ${color}">
+        <div class="card-body d-flex flex-column">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <span style="font-size:1.4rem">${icon}</span>
+            <div class="d-flex gap-1 align-items-center">
+              ${formStatusBadge(f.status)}
+              ${f.org_name_display?`<span style="font-size:9px;color:var(--textdim)">${esc(f.org_name_display)}</span>`:''}
+            </div>
+          </div>
+          <h6 style="font-weight:600;margin-bottom:4px">${esc(f.title)}</h6>
+          ${f.description?`<p style="font-size:12px;color:var(--textdim);flex:1">${esc(f.description)}</p>`:'<div class="flex-fill"></div>'}
+          ${f.rejection_note?`<div class="mt-1 mb-2 p-2" style="background:rgba(255,71,87,.1);border-radius:4px;font-size:11px;color:var(--red)"><i class="bi bi-x-circle me-1"></i>${esc(f.rejection_note)}</div>`:''}
+          <div class="d-flex gap-3 my-2" style="font-size:12px;color:var(--textdim)">
+            <span><i class="bi bi-list-ul me-1"></i>${(f.schema||[]).length} fields</span>
+            <span><i class="bi bi-inbox me-1"></i>${f.submission_count||0} submissions</span>
+          </div>
+          <div class="d-flex gap-2 mt-auto flex-wrap">
+            ${f.status==='approved' && f.is_active ? `<a href="/forms/${f.id}/data" class="btn btn-secondary btn-sm flex-fill"><i class="bi bi-table me-1"></i>View Data</a>` : ''}
+            ${USER_ROLE==='admin' && f.status==='pending_approval' ? `
+              <a href="/forms/${f.id}/review" class="btn btn-primary btn-sm flex-fill"><i class="bi bi-eye me-1"></i>Review</a>
+              <button class="btn btn-success btn-sm" onclick="approveForm(${f.id})" title="Quick approve"><i class="bi bi-check"></i></button>
+              <button class="btn btn-danger btn-sm" onclick="rejectFormPrompt(${f.id})" title="Reject"><i class="bi bi-x"></i></button>` : ''}
+            ${USER_ROLE==='admin' || (USER_ROLE==='supervisor') ? `
+              <button class="btn btn-secondary btn-sm" onclick="toggleActive(${f.id},${f.is_active?0:1})" title="${f.is_active?'Archive':'Activate'}">
+                <i class="bi bi-${f.is_active?'pause':'play'}"></i>
+              </button>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function approveForm(fid) {
+  try { await api('POST',`/api/forms/${fid}/approve`); toast('Form approved!'); load(); } catch(e){toast(e.message,'error');}
+}
+
+function rejectFormPrompt(fid) {
+  const note = prompt('Reason for rejection (optional):');
+  if (note===null) return;
+  api('POST',`/api/forms/${fid}/reject`,{note}).then(()=>{toast('Rejected','warning');load();}).catch(e=>toast(e.message,'error'));
+}
+
+async function toggleActive(fid, active) {
+  try { await api('PUT',`/api/forms/${fid}`,{is_active:active}); load(); } catch(e){toast(e.message,'error');}
+}
+
+load();
+</script>
+{% endblock %}

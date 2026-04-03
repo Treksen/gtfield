@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% set active = 'officers' %}
+{% set map = true %}
+{% block title %}Users – FieldOps{% endblock %}
+{% block extra_css %}
+<style>
+#officerMap{height:300px;border-radius:8px;border:1px solid var(--border);}
+.leaflet-container{background:#0c1520!important;}
+.leaflet-tile-pane{filter:brightness(0.7) saturate(0.6);}
+.leaflet-popup-content-wrapper{background:var(--surface2);color:#e8f4ff;border:1px solid var(--border);border-radius:6px;}
+.leaflet-popup-tip{background:var(--surface2);}
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <div>
+    <h5 class="mb-0" style="color:#e8f4ff"><i class="bi bi-people me-2" style="color:var(--amber)"></i>Field Users</h5>
+    <small style="color:var(--textdim)">Users and supervisors in your organization</small>
+  </div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-secondary btn-sm" type="button" onclick="load()"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</button>
+    <button class="btn btn-primary btn-sm" type="button" onclick="openNew()"><i class="bi bi-plus me-1"></i>Add User</button>
+  </div>
+</div>
+
+<!-- Map -->
+<div class="p-3 pb-0">
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>LIVE LOCATIONS</span>
+      <span id="mapStatus" style="font-size:11px;color:var(--textdim)">—</span>
+    </div>
+    <div class="card-body p-2"><div id="officerMap"></div></div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="p-3 pt-0">
+  <div class="d-flex gap-2 mb-3 flex-wrap">
+    <input id="searchBox" class="form-control" style="max-width:260px" placeholder="Search name, email, ID…"
+      onkeydown="if(event.key==='Enter'){doSearch();}">
+    <select id="roleFilter" class="form-select form-select-sm" style="max-width:140px" onchange="doSearch()">
+      <option value="">All</option>
+      <option value="user">Field Users</option>
+      <option value="supervisor">Supervisors</option>
+    </select>
+    <button class="btn btn-secondary btn-sm" type="button" onclick="doSearch()"><i class="bi bi-search"></i></button>
+    <button class="btn btn-secondary btn-sm" type="button" onclick="clearSearch()">Clear</button>
+  </div>
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>User</th><th>Role</th><th class="hide-xs">ID</th><th>Organisation</th><th>Status</th><th>Zone</th><th>Today</th><th class="hide-xs">Last Seen</th><th>Actions</th></tr></thead>
+        <tbody id="tbody"><tr><td colspan="9" class="text-center py-4" style="color:var(--textdim)"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- New User Modal -->
+<div class="modal fade" id="newModal" tabindex="-1">
+  <div class="modal-dialog modal-lg"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" style="font-family:var(--mono)">ADD USER</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">Full Name *</label><input id="n-name" class="form-control"></div>
+        <div class="col-md-6"><label class="form-label">Email *</label><input id="n-email" class="form-control" type="email"></div>
+        <div class="col-md-6"><label class="form-label">Role</label>
+          <select id="n-role" class="form-select"><option value="user">Field User</option><option value="supervisor">Supervisor</option></select></div>
+        <div class="col-md-6"><label class="form-label">Password</label><input id="n-pw" class="form-control" type="password" placeholder="Default: fieldops2024"></div>
+        <div class="col-md-6"><label class="form-label">Phone</label><input id="n-phone" class="form-control" type="tel"></div>
+        <div class="col-md-6"><label class="form-label">Employee ID</label><input id="n-emp" class="form-control"></div>
+        <div class="col-md-6"><label class="form-label">Organisation</label><select id="n-org" class="form-select"><option value="">-- None --</option></select></div>
+        <div class="col-md-6"><label class="form-label">Assigned Zone</label><select id="n-zone" class="form-select"><option value="">-- No Zone --</option></select></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" type="button" onclick="createUser()">Create</button></div>
+  </div></div>
+</div>
+
+<!-- Detail/Edit Modal -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-lg"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" style="font-family:var(--mono)" id="detailTitle">USER</h5><button class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body" id="detailBody"></div>
+    <div class="modal-footer" id="detailFooter"></div>
+  </div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var allOfficers=[],allOrgs=[],allZones=[];
+var leafMap=null,markerLayer=null;
+var roleColors={admin:'var(--red)',supervisor:'var(--amber)',user:'var(--cyan)'};
+
+async function load(){
+  try{
+    var res=await Promise.all([api('GET','/api/officers'),api('GET','/api/organizations'),api('GET','/api/zones')]);
+    allOfficers=res[0]||[];allOrgs=res[1]||[];allZones=res[2]||[];
+    var oh='<option value="">-- None --</option>';
+    for(var i=0;i<allOrgs.length;i++) oh+='<option value="'+allOrgs[i].id+'">'+esc(allOrgs[i].name)+'</option>';
+    var zh='<option value="">-- No Zone --</option>';
+    for(var i=0;i<allZones.length;i++) zh+='<option value="'+allZones[i].id+'">'+esc(allZones[i].name)+'</option>';
+    ['n-org'].forEach(function(id){var el=document.getElementById(id);if(el)el.innerHTML=oh;});
+    ['n-zone'].forEach(function(id){var el=document.getElementById(id);if(el)el.innerHTML=zh;});
+    renderTable(allOfficers);
+    renderMap(allOfficers);
+  }catch(e){
+    document.getElementById('tbody').innerHTML='<tr><td colspan="9" class="text-center py-4" style="color:var(--red)">Error: '+esc(e.message)+'</td></tr>';
+  }
+}
+
+function renderMap(officers){
+  if(!leafMap){
+    leafMap=L.map('officerMap').setView([-1.286389,36.817223],11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OSM',maxZoom:18}).addTo(leafMap);
+    markerLayer=L.layerGroup().addTo(leafMap);
+  }
+  markerLayer.clearLayers();
+  var withLoc=officers.filter(function(o){return o.latitude&&o.longitude;});
+  document.getElementById('mapStatus').textContent=withLoc.length+' / '+officers.length+' with GPS';
+  var bounds=[];
+  for(var i=0;i<withLoc.length;i++){
+    var o=withLoc[i];
+    // Color: supervisors = amber, users = green/grey by status
+    var col=o.role==='supervisor'?'var(--amber)':o.location_status==='online'?'#39d353':o.location_status==='idle'?'#f0a500':'#5a7a96';
+    var ini=(o.full_name||'?').split(' ').map(function(n){return n[0]||'';}).join('').slice(0,2).toUpperCase();
+    var icon=L.divIcon({className:'',
+      html:'<div style="width:36px;height:36px;border-radius:50%;background:rgba(10,14,20,.92);border:2.5px solid '+col+';display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:11px;font-weight:700;color:'+col+';box-shadow:0 0 8px '+col+'55">'+ini+'</div>',
+      iconSize:[36,36],iconAnchor:[18,18]});
+    var popup='<div style="min-width:150px"><b>'+esc(o.full_name)+'</b>';
+    popup+='<br><span style="font-size:10px;color:#aaa">'+(o.role==='supervisor'?'Supervisor':'Field User')+'</span>';
+    popup+='<br><span style="font-size:11px;color:#aaa">Org: '+esc(o.org_name||'—')+'</span>';
+    popup+='<br><span style="font-size:11px;color:#aaa">Zone: '+esc(o.zone_name||'Unassigned')+'</span>';
+    popup+='<br><span style="font-size:11px;color:#aaa">Subs today: '+(o.visits_today||0)+'</span>';
+    popup+='<br><span style="font-size:10px;color:#888">Last seen: '+fmtRelative(o.last_seen)+'</span></div>';
+    L.marker([o.latitude,o.longitude],{icon:icon}).bindPopup(popup).addTo(markerLayer);
+    bounds.push([o.latitude,o.longitude]);
+  }
+  if(bounds.length===1) leafMap.setView(bounds[0],14);
+  else if(bounds.length>1) leafMap.fitBounds(bounds,{padding:[40,40]});
+}
+
+function renderTable(data){
+  var tbody=document.getElementById('tbody');
+  if(!data||!data.length){tbody.innerHTML='<tr><td colspan="9" class="text-center py-4" style="color:var(--textdim)">No users found</td></tr>';return;}
+  var rows='';
+  for(var i=0;i<data.length;i++){
+    var o=data[i];
+    var ini=(o.full_name||'?').split(' ').map(function(n){return n[0]||'';}).join('').slice(0,2).toUpperCase();
+    var rc=roleColors[o.role]||'var(--cyan)';
+    rows+='<tr>';
+    rows+='<td><div class="d-flex align-items-center gap-2">';
+    rows+='<div style="width:30px;height:30px;background:'+rc+';color:#000;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:10px;font-weight:700;flex-shrink:0">'+ini+'</div>';
+    rows+='<div><div style="font-weight:500;color:#e8f4ff;font-size:13px">'+esc(o.full_name||'')+'</div><div style="font-size:11px;color:var(--textdim)">'+esc(o.email||'')+'</div></div></div></td>';
+    rows+='<td><span style="font-family:monospace;font-size:9px;padding:2px 5px;border-radius:3px;border:1px solid '+rc+'40;color:'+rc+'">'+(o.role||'').toUpperCase()+'</span></td>';
+    rows+='<td class="hide-xs" style="font-family:var(--mono);font-size:11px;color:var(--textdim)">'+esc(o.employee_id||'—')+'</td>';
+    rows+='<td style="font-size:12px;color:var(--textdim)">'+esc(o.org_name||'—')+'</td>';
+    rows+='<td>'+statusBadge(o.location_status)+'</td>';
+    rows+='<td style="font-size:12px;color:var(--textdim)">'+esc(o.zone_name||'Unassigned')+'</td>';
+    rows+='<td style="font-family:var(--mono);color:var(--amber)">'+(o.visits_today||0)+'</td>';
+    rows+='<td class="hide-xs" style="font-size:11px;color:var(--textdim)">'+fmtRelative(o.last_seen)+'</td>';
+    rows+='<td><div class="d-flex gap-1">';
+    rows+='<button class="btn btn-secondary btn-sm" type="button" onclick="viewUser('+o.id+')">View</button>';
+    rows+='<button class="btn btn-primary btn-sm" type="button" onclick="editUser('+o.id+')">Edit</button>';
+    rows+='</div></td></tr>';
+  }
+  tbody.innerHTML=rows;
+}
+
+function doSearch(){
+  var q=(document.getElementById('searchBox').value||'').toLowerCase().trim();
+  var role=document.getElementById('roleFilter').value;
+  var f=allOfficers;
+  if(q) f=f.filter(function(o){return[o.full_name,o.email,o.employee_id,o.org_name,o.zone_name].join(' ').toLowerCase().indexOf(q)!==-1;});
+  if(role) f=f.filter(function(o){return o.role===role;});
+  renderTable(f);
+}
+function clearSearch(){document.getElementById('searchBox').value='';document.getElementById('roleFilter').value='';renderTable(allOfficers);}
+
+function openNew(){
+  ['n-name','n-email','n-pw','n-phone','n-emp'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('n-role').value='user';document.getElementById('n-org').value='';document.getElementById('n-zone').value='';
+  new bootstrap.Modal(document.getElementById('newModal')).show();
+}
+
+async function createUser(){
+  try{
+    var ov=document.getElementById('n-org').value,zv=document.getElementById('n-zone').value;
+    var on=ov?(allOrgs.find(function(o){return o.id===parseInt(ov);})||{}).name||'':'';
+    await api('POST','/api/admin/users',{
+      full_name:document.getElementById('n-name').value,email:document.getElementById('n-email').value,
+      role:document.getElementById('n-role').value,password:document.getElementById('n-pw').value||'fieldops2024',
+      phone:document.getElementById('n-phone').value,employee_id:document.getElementById('n-emp').value,
+      org_id:ov?parseInt(ov):null,org_name:on,zone_id:zv?parseInt(zv):null,
+    });
+    toast('User created');bootstrap.Modal.getInstance(document.getElementById('newModal')).hide();load();
+  }catch(e){toast(e.message,'error');}
+}
+
+function viewUser(id){
+  var o=null;for(var i=0;i<allOfficers.length;i++){if(allOfficers[i].id===id){o=allOfficers[i];break;}}
+  if(!o)return;
+  document.getElementById('detailTitle').textContent=(o.full_name||'').toUpperCase();
+  var fields=[['Email',o.email],['Phone',o.phone||'—'],['Employee ID',o.employee_id||'—'],
+    ['Role',o.role||'—'],['Organisation',o.org_name||'—'],['Zone',o.zone_name||'Unassigned'],
+    ['Status',o.location_status||'offline'],['Last Seen',fmtRelative(o.last_seen)]];
+  var html='<div class="row g-3 mb-3">';
+  for(var i=0;i<fields.length;i++){
+    html+='<div class="col-md-4"><div class="form-label">'+fields[i][0]+'</div><div style="font-size:13px">'+esc(String(fields[i][1]))+'</div></div>';
+  }
+  html+='</div><div class="row g-2 text-center">';
+  html+='<div class="col"><div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:12px"><div style="font-family:monospace;font-size:22px;font-weight:700;color:var(--amber)">'+(o.visits_today||0)+'</div><div style="font-size:10px;color:var(--textdim)">SUBMISSIONS TODAY</div></div></div></div>';
+  document.getElementById('detailBody').innerHTML=html;
+  document.getElementById('detailFooter').innerHTML='<button class="btn btn-secondary" data-bs-dismiss="modal">Close</button><button class="btn btn-primary ms-2" type="button" onclick="switchToEdit('+id+')">Edit</button>';
+  new bootstrap.Modal(document.getElementById('detailModal')).show();
+}
+
+function switchToEdit(id){var m=bootstrap.Modal.getInstance(document.getElementById('detailModal'));if(m)m.hide();setTimeout(function(){editUser(id);},350);}
+
+function editUser(id){
+  var o=null;for(var i=0;i<allOfficers.length;i++){if(allOfficers[i].id===id){o=allOfficers[i];break;}}
+  var oh='<option value="">-- None --</option>';
+  for(var i=0;i<allOrgs.length;i++) oh+='<option value="'+allOrgs[i].id+'"'+(o&&o.org_id===allOrgs[i].id?' selected':'')+'>'+esc(allOrgs[i].name)+'</option>';
+  var zh='<option value="">-- No Zone --</option>';
+  for(var i=0;i<allZones.length;i++) zh+='<option value="'+allZones[i].id+'"'+(o&&o.zone_id===allZones[i].id?' selected':'')+'>'+esc(allZones[i].name)+'</option>';
+  document.getElementById('detailTitle').textContent='EDIT USER';
+  document.getElementById('detailBody').innerHTML=
+    '<div class="row g-3">'+
+    '<div class="col-md-6"><label class="form-label">Full Name</label><input id="e-name" class="form-control" value="'+esc(o?o.full_name||'':'')+'"></div>'+
+    '<div class="col-md-6"><label class="form-label">Phone</label><input id="e-phone" class="form-control" value="'+esc(o?o.phone||'':'')+'"></div>'+
+    '<div class="col-md-6"><label class="form-label">Employee ID</label><input id="e-emp" class="form-control" value="'+esc(o?o.employee_id||'':'')+'"></div>'+
+    '<div class="col-md-6"><label class="form-label">Organisation</label><select id="e-org" class="form-select">'+oh+'</select></div>'+
+    '<div class="col-md-6"><label class="form-label">Assigned Zone</label><select id="e-zone" class="form-select">'+zh+'</select></div>'+
+    '<div class="col-md-6"><label class="form-label">Status</label><select id="e-active" class="form-select"><option value="1"'+(o&&o.is_active?' selected':'')+'>Active</option><option value="0"'+(o&&!o.is_active?' selected':'')+'>Inactive</option></select></div>'+
+    '</div>';
+  document.getElementById('detailFooter').innerHTML=
+    '<button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>'+
+    '<button class="btn btn-danger btn-sm me-auto" type="button" onclick="deactivateUser('+id+')">Deactivate</button>'+
+    '<button class="btn btn-primary" type="button" onclick="saveUser('+id+')">Save</button>';
+  new bootstrap.Modal(document.getElementById('detailModal')).show();
+}
+
+async function saveUser(id){
+  try{
+    var ov=document.getElementById('e-org').value,zv=document.getElementById('e-zone').value;
+    var on=ov?(allOrgs.find(function(o){return o.id===parseInt(ov);})||{}).name||'':'';
+    await api('PUT','/api/admin/users/'+id,{
+      full_name:document.getElementById('e-name').value,phone:document.getElementById('e-phone').value,
+      employee_id:document.getElementById('e-emp').value,org_id:ov?parseInt(ov):null,org_name:on,
+      zone_id:zv?parseInt(zv):null,is_active:parseInt(document.getElementById('e-active').value),role:'user',
+    });
+    toast('User updated');bootstrap.Modal.getInstance(document.getElementById('detailModal')).hide();load();
+  }catch(e){toast(e.message,'error');}
+}
+
+async function deactivateUser(id){
+  if(!confirm('Deactivate?'))return;
+  try{await api('DELETE','/api/admin/users/'+id);toast('Deactivated','warning');bootstrap.Modal.getInstance(document.getElementById('detailModal')).hide();load();}
+  catch(e){toast(e.message,'error');}
+}
+
+load();
+setInterval(function(){api('GET','/api/officers').then(function(d){allOfficers=d;renderMap(d);}).catch(function(){});},30000);
+</script>
+{% endblock %}

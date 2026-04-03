@@ -1,0 +1,65 @@
+:root {
+    --surface: #0f172a;
+    --surface2: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --textdim: #94a3b8;
+    --cyan: #22d3ee;
+    --amber: #f59e0b;
+}
+
+body {
+    background: #020617;
+    color: var(--text);
+}
+
+/* TABLE FIX */
+.table {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+.table th {
+    background: var(--surface2);
+    color: var(--textdim);
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.table td {
+    background: transparent !important;
+    border-color: var(--border);
+}
+
+.table tbody tr:hover {
+    background: var(--surface2);
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+thead {
+    background: var(--surface2);
+}
+
+thead th {
+    padding: 12px;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--textdim);
+    letter-spacing: 0.5px;
+    text-align: left;
+}
+
+tbody tr:hover {
+    background: var(--surface2);
+}
+tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+}

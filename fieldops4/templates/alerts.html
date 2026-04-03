@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% set active = 'alerts' %}
+{% block title %}Alerts – FieldOps{% endblock %}
+{% block content %}
+<div class="page-header d-flex align-items-center justify-content-between">
+  <div><h5 class="mb-0" style="color:#e8f4ff">Alerts</h5><small style="color:var(--textdim)">Officer incidents and system notifications</small></div>
+  <button class="btn btn-secondary btn-sm" onclick="loadAlerts()"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</button>
+</div>
+<div class="p-3">
+  <div id="alerts-list" class="d-flex flex-column gap-2"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function loadAlerts() {
+  const list = document.getElementById('alerts-list');
+  list.innerHTML = '<div class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></div>';
+  try {
+    const alerts = await fetch('/api/alerts').then(r=>r.json());
+    if (!alerts.length) { list.innerHTML='<div class="text-center py-5" style="color:var(--textdim)">No alerts</div>'; return; }
+    const icons = {offline_too_long:'📵',low_battery:'🔋',outside_zone:'📍',missed_target:'⚠️',sos:'🆘',system:'ℹ️'};
+    const borderColors = {critical:'var(--red)',warning:'var(--amber)',info:'var(--blue)'};
+    list.innerHTML = alerts.map(a=>`
+      <div class="card" style="border-left:3px solid ${borderColors[a.severity]||'var(--amber)'};opacity:${a.is_read?'.5':'1'}">
+        <div class="card-body d-flex align-items-start gap-3">
+          <span style="font-size:22px">${icons[a.alert_type]||'⚠️'}</span>
+          <div style="flex:1">
+            <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+              <span class="badge" style="font-family:monospace;font-size:9px;background:${a.severity==='critical'?'rgba(255,71,87,.15)':a.severity==='warning'?'rgba(240,165,0,.15)':'rgba(33,150,243,.15)'};color:${borderColors[a.severity]||'var(--amber)'}">${a.alert_type.replace(/_/g,' ').toUpperCase()}</span>
+              ${a.officer_name?`<span style="font-size:13px;font-weight:500;color:#e8f4ff">${a.officer_name}</span>`:''}
+              ${a.is_read?'<span class="mono" style="font-size:10px;color:var(--textdim)">resolved</span>':''}
+            </div>
+            <div style="font-size:13px">${a.message}</div>
+            <div class="mono" style="font-size:10px;color:var(--textdim);margin-top:4px">${fmtRelative(a.created_at)}</div>
+          </div>
+          ${!a.is_read?`<button class="btn btn-secondary btn-sm" onclick="resolve(${a.id},this)">Resolve</button>`:''}
+        </div>
+      </div>`).join('');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function resolve(id, btn) {
+  try {
+    await api('PUT',`/api/alerts/${id}/read`);
+    btn.closest('.card').style.opacity='.5'; btn.remove(); toast('Alert resolved');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+loadAlerts();
+</script>
+{% endblock %}

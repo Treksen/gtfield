@@ -1,0 +1,251 @@
+{% extends "base.html" %} {% set active = 'reports' %} {% block title %}Reports
+– FieldOps{% endblock %} {% block content %}
+<div class="page-header d-flex align-items-center justify-content-between">
+  <div>
+    <h5 class="mb-0" style="color: #e8f4ff">
+      <i class="bi bi-bar-chart me-2" style="color: var(--amber)"></i>Reports
+    </h5>
+    <small style="color: var(--textdim)"
+      >Submission reports by user, zone, and date</small
+    >
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <input
+      type="date"
+      class="form-control form-control-sm"
+      id="dateInput"
+      style="width: 160px"
+    />
+    <button class="btn btn-primary btn-sm" onclick="loadReports()">
+      <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+    </button>
+  </div>
+</div>
+
+<div class="p-3">
+  <!-- Weekly trend -->
+  <div class="card mb-3">
+    <div class="card-header">WEEKLY SUBMISSION TREND</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Submissions</th>
+              <th>Active Users</th>
+              <th>Trend</th>
+            </tr>
+          </thead>
+          <tbody id="weeklyBody">
+            <tr>
+              <td
+                colspan="4"
+                class="text-center py-3"
+                style="color: var(--textdim)"
+              >
+                Loading…
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Daily per user -->
+  <div class="card mb-3">
+    <div class="card-header" id="dailyHeader">DAILY USER REPORT</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Role</th>
+              <th>Organisation</th>
+              <th>Submissions</th>
+              <th>Status</th>
+              <th class="hide-xs">Last Seen</th>
+            </tr>
+          </thead>
+          <tbody id="dailyBody">
+            <tr>
+              <td
+                colspan="5"
+                class="text-center py-3"
+                style="color: var(--textdim)"
+              >
+                Loading…
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Zone report -->
+  <div class="card">
+    <div class="card-header">ZONE SUBMISSION REPORT</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Zone</th>
+              <th>Sub-County / Ward</th>
+              <th>Officers</th>
+              <th>Submissions Today</th>
+              <th>Target</th>
+            </tr>
+          </thead>
+          <tbody id="zoneBody">
+            <tr>
+              <td
+                colspan="5"
+                class="text-center py-3"
+                style="color: var(--textdim)"
+              >
+                Loading…
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %} {% block scripts %}
+<script>
+  // Set today's date
+  document.getElementById("dateInput").value = new Date()
+    .toISOString()
+    .slice(0, 10);
+
+  async function loadReports() {
+    var date = document.getElementById("dateInput").value;
+    document.getElementById("dailyHeader").textContent =
+      "DAILY USER REPORT — " + date;
+
+    try {
+      var [daily, zones, weekly] = await Promise.all([
+        api("GET", "/api/reports/daily?date=" + date),
+        api("GET", "/api/reports/zones?date=" + date),
+        api("GET", "/api/reports/weekly"),
+      ]);
+
+      // Weekly table
+      var wb = document.getElementById("weeklyBody");
+      if (!weekly.length) {
+        wb.innerHTML =
+          '<tr><td colspan="4" class="text-center py-3" style="color:var(--textdim)">No data yet</td></tr>';
+      } else {
+        var maxSubs =
+          Math.max.apply(
+            null,
+            weekly.map(function (r) {
+              return r.submissions || 0;
+            }),
+          ) || 1;
+        wb.innerHTML = weekly
+          .map(function (r) {
+            var pct = Math.round((r.submissions / maxSubs) * 100);
+            return (
+              "<tr>" +
+              '<td style="font-family:var(--mono);font-size:12px">' +
+              (r.date || "") +
+              "</td>" +
+              '<td style="font-family:var(--mono);color:var(--amber)">' +
+              (r.submissions || 0) +
+              "</td>" +
+              '<td style="font-family:var(--mono);color:var(--cyan)">' +
+              (r.active_officers || 0) +
+              "</td>" +
+              '<td style="min-width:120px">' +
+              progressBar(pct, "6px") +
+              "</td>" +
+              "</tr>"
+            );
+          })
+          .join("");
+      }
+
+      // Daily users table
+      var db = document.getElementById("dailyBody");
+      var officers = daily.officers || [];
+      if (!officers.length) {
+        db.innerHTML =
+          '<tr><td colspan="5" class="text-center py-3" style="color:var(--textdim)">No users found</td></tr>';
+      } else {
+        db.innerHTML = officers
+          .map(function (o) {
+            return (
+              "<tr>" +
+              '<td><div style="font-weight:500;color:#var(--textdim)">' +
+              esc(o.full_name) +
+              "</div>" +
+              '<td><div style="font-size:10px;color:var(--textdim);font-family:var(--mono)">' +
+              esc(o.role || "") +
+              "</div></td>" +
+              '<td style="font-size:12px;color:var(--textdim)">' +
+              esc(o.org_name || "—") +
+              "</td>" +
+              '<td><span style="font-family:var(--mono);color:var(--amber);font-size:16px">' +
+              (o.submissions || 0) +
+              "</span></td>" +
+              "<td>" +
+              statusBadge(o.current_status) +
+              "</td>" +
+              '<td style="font-size:11px;color:var(--textdim)">' +
+              fmtRelative(o.last_seen) +
+              "</td>" +
+              "</tr>"
+            );
+          })
+          .join("");
+      }
+
+      // Zone table
+      var zb = document.getElementById("zoneBody");
+      if (!zones.length) {
+        zb.innerHTML =
+          '<tr><td colspan="5" class="text-center py-3" style="color:var(--textdim)">No zones found</td></tr>';
+      } else {
+        zb.innerHTML = zones
+          .map(function (z) {
+            return (
+              "<tr>" +
+              '<td><div style="display:flex;align-items:center;gap:8px">' +
+              '<div style="width:10px;height:10px;border-radius:2px;background:' +
+              (z.color || "#f0a500") +
+              ';flex-shrink:0"></div>' +
+              '<span style="font-weight:500">' +
+              esc(z.name) +
+              "</span></div></td>" +
+              '<td style="font-size:12px;color:var(--textdim)">' +
+              esc([z.sub_county, z.ward].filter(Boolean).join(" / ") || "—") +
+              "</td>" +
+              '<td style="font-family:var(--mono);color:var(--cyan)">' +
+              (z.officers_assigned || 0) +
+              "</td>" +
+              '<td><span style="font-family:var(--mono);color:var(--amber)">' +
+              (z.submissions_today || 0) +
+              "</span></td>" +
+              '<td style="font-family:var(--mono);font-size:12px;color:var(--textdim)">' +
+              (z.target_households || 0) +
+              "</td>" +
+              "</tr>"
+            );
+          })
+          .join("");
+      }
+    } catch (e) {
+      toast(e.message || "Failed to load reports", "error");
+    }
+  }
+
+  loadReports();
+</script>
+{% endblock %}

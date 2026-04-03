@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% set active = 'zones' %}
+{% block title %}Zones – FieldOps{% endblock %}
+{% block content %}
+<div class="page-header d-flex align-items-center justify-content-between">
+  <div>
+    <h5 class="mb-0" style="font-family:var(--mono);color:var(--amber)">
+      <i class="bi bi-geo-alt me-2"></i>ZONE MANAGEMENT
+    </h5>
+    <small style="color:var(--textdim)">Create and manage work zones. Assign zones to field users.</small>
+  </div>
+  <button class="btn btn-primary btn-sm" onclick="openCreate()">
+    <i class="bi bi-plus me-1"></i>New Zone
+  </button>
+</div>
+
+<div class="p-3">
+  <div id="zoneGrid" class="row g-3">
+    <div class="col-12 text-center py-5" style="color:var(--textdim)">
+      <div class="spinner-border spinner-border-sm me-2"></div>Loading…
+    </div>
+  </div>
+</div>
+
+<!-- Zone Modal -->
+<div class="modal fade" id="zoneModal" tabindex="-1">
+  <div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header">
+      <h6 class="modal-title" style="font-family:var(--mono)" id="zoneModalTitle">CREATE ZONE</h6>
+      <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="zoneId">
+      <div class="mb-3"><label class="form-label">Zone Name *</label>
+        <input type="text" class="form-control" id="zoneName" placeholder="e.g. Kibera North Block A"></div>
+      <div class="row g-2 mb-3">
+        <div class="col-6"><label class="form-label">Sub-County</label>
+          <input type="text" class="form-control" id="zoneSubCounty" placeholder="Kibera"></div>
+        <div class="col-6"><label class="form-label">Ward</label>
+          <input type="text" class="form-control" id="zoneWard" placeholder="Laini Saba"></div>
+      </div>
+      <div class="mb-3"><label class="form-label">Organisation</label>
+        <select class="form-select" id="zoneOrg"><option value="">-- All Orgs --</option></select>
+      </div>
+      <div class="mb-3"><label class="form-label">Description</label>
+        <textarea class="form-control" id="zoneDesc" rows="2"></textarea></div>
+      <div class="mb-3"><label class="form-label">Target Households</label>
+        <input type="number" class="form-control" id="zoneTarget" value="50" min="0"></div>
+      <div class="mb-3">
+        <label class="form-label">Bounding Box (for GPS auto-detection)</label>
+        <div class="row g-2">
+          <div class="col-6"><input type="number" class="form-control" id="bboxN" placeholder="North lat" step="0.0001"></div>
+          <div class="col-6"><input type="number" class="form-control" id="bboxS" placeholder="South lat" step="0.0001"></div>
+          <div class="col-6"><input type="number" class="form-control" id="bboxE" placeholder="East lng"  step="0.0001"></div>
+          <div class="col-6"><input type="number" class="form-control" id="bboxW" placeholder="West lng"  step="0.0001"></div>
+        </div>
+      </div>
+      <div class="mb-3"><label class="form-label">Colour</label>
+        <input type="color" class="form-control form-control-color" id="zoneColor" value="#f0a500"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+      <button class="btn btn-primary" onclick="saveZone()">Save Zone</button>
+    </div>
+  </div></div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+let zones = [];
+let orgs  = [];
+
+async function load() {
+  try {
+    [zones, orgs] = await Promise.all([
+      api('GET', '/api/zones'),
+      api('GET', '/api/organizations'),
+    ]);
+    // Populate org dropdown
+    const sel = document.getElementById('zoneOrg');
+    sel.innerHTML = '<option value="">-- All Orgs --</option>';
+    orgs.forEach(function(o) {
+      var opt = document.createElement('option');
+      opt.value = o.id; opt.textContent = o.name; sel.appendChild(opt);
+    });
+    render();
+  } catch(e) { toast(e.message || 'Failed to load zones', 'error'); }
+}
+
+function render() {
+  const grid = document.getElementById('zoneGrid');
+  if (!zones.length) {
+    grid.innerHTML =
+      '<div class="col-12 text-center py-5" style="color:var(--textdim)">' +
+      '<i class="bi bi-geo-alt" style="font-size:2.5rem"></i>' +
+      '<p class="mt-3">No zones yet. Click <strong style="color:var(--amber)">New Zone</strong> to create one.</p></div>';
+    return;
+  }
+  grid.innerHTML = zones.map(function(z) {
+    var color = z.color || '#f0a500';
+    var orgName = z.org_name_display || (orgs.find(function(o){return o.id===z.org_id;}) || {}).name || 'All Orgs';
+    return '<div class="col-md-6 col-lg-4">' +
+      '<div class="card h-100" style="border-left:3px solid ' + color + '">' +
+      '<div class="card-body">' +
+        '<div class="d-flex justify-content-between align-items-start mb-2">' +
+          '<div><h6 class="mb-0" style="font-weight:600">' + esc(z.name) + '</h6>' +
+          '<small style="color:var(--textdim)">' + esc([z.sub_county, z.ward].filter(Boolean).join(' · ') || 'No location') + '</small></div>' +
+          '<div class="d-flex gap-1">' +
+            '<button class="btn btn-secondary btn-sm" onclick="openEdit(' + z.id + ')" title="Edit"><i class="bi bi-pencil"></i></button>' +
+          '</div>' +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--textdim);margin-bottom:8px">' +
+          '<i class="bi bi-building me-1"></i>' + esc(orgName) +
+        '</div>' +
+        (z.description ? '<p style="font-size:12px;color:var(--textdim);margin-bottom:8px">' + esc(z.description) + '</p>' : '') +
+        '<div class="row g-2 mb-2" style="font-size:12px">' +
+          '<div class="col-6 text-center"><div style="font-family:var(--mono);font-size:18px;color:var(--amber)">' + (z.target_households||0) + '</div><div style="color:var(--textdim)">Target HH</div></div>' +
+          '<div class="col-6 text-center"><div style="font-family:var(--mono);font-size:18px;color:var(--green)">' + (z.officer_count||0) + '</div><div style="color:var(--textdim)">Officers</div></div>' +
+        '</div>' +
+        (z.creator_name ? '<div style="font-size:10px;color:var(--textdim)"><i class="bi bi-person me-1"></i>' + esc(z.creator_name) + '</div>' : '') +
+      '</div></div></div>';
+  }).join('');
+}
+
+function openCreate() {
+  document.getElementById('zoneId').value = '';
+  document.getElementById('zoneName').value = '';
+  document.getElementById('zoneSubCounty').value = '';
+  document.getElementById('zoneWard').value = '';
+  document.getElementById('zoneOrg').value = '';
+  document.getElementById('zoneDesc').value = '';
+  document.getElementById('zoneTarget').value = '50';
+  document.getElementById('bboxN').value = '';
+  document.getElementById('bboxS').value = '';
+  document.getElementById('bboxE').value = '';
+  document.getElementById('bboxW').value = '';
+  document.getElementById('zoneColor').value = '#f0a500';
+  document.getElementById('zoneModalTitle').textContent = 'CREATE ZONE';
+  new bootstrap.Modal(document.getElementById('zoneModal')).show();
+}
+
+function openEdit(id) {
+  var z = zones.find(function(x){ return x.id === id; });
+  if (!z) return;
+  document.getElementById('zoneId').value = z.id;
+  document.getElementById('zoneName').value = z.name;
+  document.getElementById('zoneSubCounty').value = z.sub_county || '';
+  document.getElementById('zoneWard').value = z.ward || '';
+  document.getElementById('zoneOrg').value = z.org_id || '';
+  document.getElementById('zoneDesc').value = z.description || '';
+  document.getElementById('zoneTarget').value = z.target_households || 0;
+  document.getElementById('bboxN').value = z.bbox_north || '';
+  document.getElementById('bboxS').value = z.bbox_south || '';
+  document.getElementById('bboxE').value = z.bbox_east || '';
+  document.getElementById('bboxW').value = z.bbox_west || '';
+  document.getElementById('zoneColor').value = z.color || '#f0a500';
+  document.getElementById('zoneModalTitle').textContent = 'EDIT ZONE';
+  new bootstrap.Modal(document.getElementById('zoneModal')).show();
+}
+
+async function saveZone() {
+  var id = document.getElementById('zoneId').value;
+  var payload = {
+    name:              document.getElementById('zoneName').value.trim(),
+    sub_county:        document.getElementById('zoneSubCounty').value.trim(),
+    ward:              document.getElementById('zoneWard').value.trim(),
+    org_id:            parseInt(document.getElementById('zoneOrg').value) || null,
+    description:       document.getElementById('zoneDesc').value.trim(),
+    target_households: parseInt(document.getElementById('zoneTarget').value) || 0,
+    bbox_north:        parseFloat(document.getElementById('bboxN').value) || null,
+    bbox_south:        parseFloat(document.getElementById('bboxS').value) || null,
+    bbox_east:         parseFloat(document.getElementById('bboxE').value) || null,
+    bbox_west:         parseFloat(document.getElementById('bboxW').value) || null,
+    color:             document.getElementById('zoneColor').value,
+  };
+  if (!payload.name) return toast('Zone name is required', 'error');
+  try {
+    if (id) {
+      await api('PUT', '/api/zones/' + id, payload);
+      toast('Zone updated');
+    } else {
+      await api('POST', '/api/zones', payload);
+      toast('Zone created');
+    }
+    bootstrap.Modal.getInstance(document.getElementById('zoneModal')).hide();
+    load();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+load();
+</script>
+{% endblock %}
