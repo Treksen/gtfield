@@ -47,9 +47,19 @@ def query(sql, args=(), one=False):
     db = get_db()
     if USE_POSTGRES:
         import psycopg2.extras
+        import re as _re
         sql = sql.replace('?', '%s')
         sql = sql.replace("datetime('now')", "NOW()")
         sql = sql.replace("date('now')", "CURRENT_DATE")
+        # Convert SQLite interval syntax to PostgreSQL
+        # datetime('now','-N days/hours/minutes') -> NOW() - INTERVAL 'N days/hours/minutes'
+        def _fix_interval(m):
+            n, unit = m.group(1), m.group(2)
+            if n.startswith('-'):
+                return "NOW() - INTERVAL '" + n.lstrip('-') + " " + unit + "'"
+            return "NOW() + INTERVAL '" + n + " " + unit + "'"
+        import re as _re2
+        sql = _re2.sub(r"datetime\('now',\s*'(-?\d+)\s+(days?|hours?|minutes?)'\)", _fix_interval, sql)
         with db.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, args)
             rv = cur.fetchall()
@@ -65,10 +75,18 @@ def query(sql, args=(), one=False):
 def execute(sql, args=()):
     db = get_db()
     if USE_POSTGRES:
+        import re as _re
         sql = sql.replace('?', '%s')
         sql = sql.replace("datetime('now')", "NOW()")
         sql = sql.replace("date('now')", "CURRENT_DATE")
         sql = sql.replace('AUTOINCREMENT', '')
+        def _fix_interval(m):
+            n, unit = m.group(1), m.group(2)
+            if n.startswith('-'):
+                return "NOW() - INTERVAL '" + n.lstrip('-') + " " + unit + "'"
+            return "NOW() + INTERVAL '" + n + " " + unit + "'"
+        import re as _re2
+        sql = _re2.sub(r"datetime\('now',\s*'(-?\d+)\s+(days?|hours?|minutes?)'\)", _fix_interval, sql)
         with db.cursor() as cur:
             cur.execute(sql, args)
             try:
@@ -581,9 +599,9 @@ def api_login():
     session['user_id']   = u['id']
     session['user_role'] = u['role']
     # Mark user as online
-    execute("""INSERT OR REPLACE INTO officer_locations
-               (officer_id,latitude,longitude,status,updated_at)
-               VALUES (?,0,0,'online',datetime('now'))""", [u['id']])
+    execute("""INSERT INTO officer_locations (officer_id,latitude,longitude,status,updated_at)
+               VALUES (?,0,0,'online',datetime('now'))
+               ON CONFLICT(officer_id) DO UPDATE SET status='online',updated_at=datetime('now')""", [u['id']])
     return jsonify({'user': {'id': u['id'], 'full_name': u['full_name'],
                              'email': u['email'], 'role': u['role'],
                              'org_id': u['org_id'], 'org_name': u['org_name']}})
@@ -600,12 +618,10 @@ def api_logout():
 @login_required()
 def api_heartbeat():
     """Called every 60s from browser to keep status=online. Marks offline if not seen for 3 min."""
-    execute("""INSERT OR REPLACE INTO officer_locations
-               (officer_id,latitude,longitude,status,updated_at)
-               VALUES (?,COALESCE((SELECT latitude FROM officer_locations WHERE officer_id=?),0),
-                         COALESCE((SELECT longitude FROM officer_locations WHERE officer_id=?),0),
-                         'online',datetime('now'))""",
-            [session['user_id'], session['user_id'], session['user_id']])
+    execute("""INSERT INTO officer_locations (officer_id,latitude,longitude,status,updated_at)
+               VALUES (?,0,0,'online',datetime('now'))
+               ON CONFLICT(officer_id) DO UPDATE SET status='online',updated_at=datetime('now')""",
+            [session['user_id']])
     return jsonify({'ok': True})
 
 @app.route('/api/auth/me')
@@ -780,7 +796,7 @@ def api_admin_update_user(uid):
     # Zone assignment if provided
     zone_id = d.get('zone_id')
     if zone_id:
-        execute("INSERT OR REPLACE INTO zone_assignments (zone_id,officer_id,target_visits,assigned_by) VALUES (?,?,?,?)",
+        execute("INSERT INTO zone_assignments (zone_id,officer_id,target_visits,assigned_by) VALUES (?,?,?,?) ON CONFLICT(zone_id,officer_id) DO UPDATE SET target_visits=EXCLUDED.target_visits,assigned_by=EXCLUDED.assigned_by",
                 [zone_id, uid, d.get('target_visits', 10), session['user_id']])
     elif zone_id == 0:
         execute("DELETE FROM zone_assignments WHERE officer_id=?", [uid])
@@ -799,7 +815,7 @@ def api_admin_delete_user(uid):
 @login_required(roles=['admin', 'supervisor'])
 def api_officers():
     rows = query("""
-        SELECT u.id, u.full_name, u.role, u.email, u.phone, u.employee_id,
+        SELECT u.id, u.full_name, u.email, u.phone, u.employee_id,
                COALESCE(og.name, u.org_name, '—') as org_name,
                u.is_active, u.created_at, u.org_id,
                ol.status as location_status, ol.battery_pct,
@@ -921,7 +937,7 @@ def api_delete_zone(zid):
 @login_required(roles=['admin', 'supervisor'])
 def api_assign_zone(zid):
     d = request.json or {}
-    execute("INSERT OR REPLACE INTO zone_assignments (zone_id,officer_id,target_visits,assigned_by) VALUES (?,?,?,?)",
+    execute("INSERT INTO zone_assignments (zone_id,officer_id,target_visits,assigned_by) VALUES (?,?,?,?) ON CONFLICT(zone_id,officer_id) DO UPDATE SET target_visits=EXCLUDED.target_visits,assigned_by=EXCLUDED.assigned_by",
             [zid, d['officer_id'], d.get('target_visits', 10), session['user_id']])
     return jsonify({'message': 'Assigned'})
 
@@ -1289,9 +1305,12 @@ def api_my_submit():
         except Exception as e:
             print(f"Dynamic row insert error: {e}")
     # Update location
-    execute("""INSERT OR REPLACE INTO officer_locations
+    execute("""INSERT INTO officer_locations
                (officer_id,latitude,longitude,status,updated_at)
-               VALUES (?,?,?,'online',datetime('now'))""",
+               VALUES (?,?,?,'online',datetime('now'))
+               ON CONFLICT(officer_id) DO UPDATE SET
+               latitude=EXCLUDED.latitude,longitude=EXCLUDED.longitude,
+               status='online',updated_at=datetime('now')""",
             [u['id'], lat or 0, lng or 0])
     return jsonify({'id': sid, 'message': 'Submission saved', 'status': status})
 
@@ -1338,9 +1357,13 @@ def api_my_delete_submission(sid):
 @login_required()
 def api_location_ping():
     d = request.json or {}
-    execute("""INSERT OR REPLACE INTO officer_locations
+    execute("""INSERT INTO officer_locations
                (officer_id,latitude,longitude,accuracy,battery_pct,status,updated_at)
-               VALUES (?,?,?,?,?,'online',datetime('now'))""",
+               VALUES (?,?,?,?,?,'online',datetime('now'))
+               ON CONFLICT(officer_id) DO UPDATE SET
+               latitude=EXCLUDED.latitude,longitude=EXCLUDED.longitude,
+               accuracy=EXCLUDED.accuracy,battery_pct=EXCLUDED.battery_pct,
+               status='online',updated_at=datetime('now')""",
             [session['user_id'], d.get('latitude', 0), d.get('longitude', 0),
              d.get('accuracy'), d.get('battery_pct')])
     return jsonify({'ok': True})
@@ -1516,7 +1539,7 @@ def api_seed():
     for uid, uorg in oids:
         matching = [zid for zid, zorg in zone_ids if zorg == uorg]
         if matching:
-            execute("INSERT OR IGNORE INTO zone_assignments (zone_id,officer_id,target_visits,assigned_by) VALUES (?,?,?,1)",
+            execute("INSERT INTO zone_assignments (zone_id,officer_id,target_visits,assigned_by) VALUES (?,?,?,1) ON CONFLICT(zone_id,officer_id) DO NOTHING",
                     [matching[0], uid, 10])
 
     # Health survey form
@@ -1588,7 +1611,7 @@ def api_seed():
             )
             insert_dynamic_row(h_table, h_schema, data, sid, uid, zid, uorg, ts)
 
-    execute_returning("INSERT OR REPLACE INTO officer_locations (officer_id,latitude,longitude,status) VALUES (?,?,?,?)",
+    execute_returning("INSERT INTO officer_locations (officer_id,latitude,longitude,status) VALUES (?,?,?,?) ON CONFLICT(officer_id) DO UPDATE SET latitude=EXCLUDED.latitude,longitude=EXCLUDED.longitude,status=EXCLUDED.status",
                       [oids[0][0], -1.315, 36.780, 'online'])
 
     return jsonify({'message': f'Seeded: 2 orgs, {len(oids)} users, 2 approved forms, 1 pending'})
@@ -1598,12 +1621,16 @@ with app.app_context():
     init_db()
 
 if __name__ == '__main__':
+    port  = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', '0') == '1'
+    db_label = 'PostgreSQL (Supabase)' if USE_POSTGRES else 'SQLite (local dev)'
     print(f"""
 ╔══════════════════════════════════════════════════════╗
 ║         FIELDOPS v4  — ODK-Scale Platform            ║
 ╠══════════════════════════════════════════════════════╣
-║  Database : {'PostgreSQL (Supabase)' if USE_POSTGRES else 'SQLite (local dev)':40}║
-║  URL      : http://localhost:5000                    ║
+║  Database : {db_label:<40}║
+║  Port     : {port:<40}║
+║  Debug    : {str(debug):<40}║
 ╚══════════════════════════════════════════════════════╝
 """)
-    app.run(debug=True, port=5000)
+    app.run(debug=debug, host='0.0.0.0', port=port)
