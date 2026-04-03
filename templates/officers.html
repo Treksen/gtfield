@@ -234,8 +234,8 @@ function editUser(id){
     '<span style="font-size:11px;color:var(--textdim)">Current Role:</span>'+
     '<span style="font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid '+rc2+';color:'+rc2+';font-weight:600">'+roleLabel2.toUpperCase()+'</span>'+
     '</div>'+
-    '<div class="row g-3">'+'
-    '<div class="col-md-6"><label class="form-label">Full Name</label><input id="e-name" class="form-control" value="'+esc(o?o.full_name||'':'')+'"></div>'+
+    '<div class="row g-3">'+
+    <div class="col-md-6"><label class="form-label">Full Name</label><input id="e-name" class="form-control" value="'+esc(o?o.full_name||'':'')+'"></div>'+
     '<div class="col-md-6"><label class="form-label">Role</label><select id="e-role" class="form-select"><option value="user"'+(o&&o.role==='user'?' selected':'')+'>Field User</option><option value="supervisor"'+(o&&o.role==='supervisor'?' selected':'')+'>Supervisor</option></select></div>'+
     '<div class="col-md-6"><label class="form-label">Phone</label><input id="e-phone" class="form-control" value="'+esc(o?o.phone||'':'')+'"></div>'+
     '<div class="col-md-6"><label class="form-label">Employee ID</label><input id="e-emp" class="form-control" value="'+esc(o?o.employee_id||'':'')+'"></div>'+
