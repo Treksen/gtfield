@@ -186,6 +186,28 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 @media(max-width:480px){
   .btn-sm{padding:5px 8px;font-size:10px;}
 }
+
+/* ── FORCE LIGHT TEXT EVERYWHERE IN DARK THEME ── */
+body,p,span,div,li,a,label,input,select,textarea,h1,h2,h3,h4,h5,h6{color:inherit;}
+.table td, .table th{color:var(--text)!important;}
+.table tbody tr td{color:var(--text)!important;}
+.table td *{color:inherit;}
+/* User name in tables */
+.user-name{color:#e8f4ff!important;font-weight:500;}
+/* Override any Bootstrap text utilities that might slip through */
+.text-body{color:var(--text)!important;}
+.text-dark{color:var(--text)!important;}
+.text-muted{color:var(--textdim)!important;}
+/* Nav tabs in modals */
+.nav-tabs{border-color:var(--border)!important;}
+.nav-tabs .nav-link{color:var(--textdim)!important;border-color:transparent!important;}
+.nav-tabs .nav-link.active{color:var(--amber)!important;background:transparent!important;border-color:var(--border) var(--border) var(--surface)!important;}
+.nav-tabs .nav-link:hover{color:var(--amber)!important;border-color:transparent!important;}
+/* List group */
+.list-group-item{background:var(--surface)!important;border-color:var(--border)!important;color:var(--text)!important;}
+/* Pagination */
+.page-link{background:var(--surface)!important;border-color:var(--border)!important;color:var(--textdim)!important;}
+.page-item.active .page-link{background:var(--amber)!important;color:#000!important;}
 </style>
 {% block extra_css %}{% endblock %}
 </head>

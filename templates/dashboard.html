@@ -225,7 +225,9 @@ async function loadDashboard() {
         ur+='<div style="width:26px;height:26px;background:var(--cyan);color:#000;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:10px;font-weight:700;flex-shrink:0">'+ini+'</div>';
         ur+='<div><div style="font-size:13px;color:var(--textdim); font-weight:500;white-space:nowrap">'+esc(o.full_name||'')+'</div>';
         ur+='<div style="font-size:10px;color:var(--textdim)">'+esc(o.employee_id||'')+'</div></div></div></td>';
-        var rc2=o.role==='supervisor'?'var(--amber)':'var(--cyan)';ur+='<td><span style="font-family:monospace;font-size:9px;padding:2px 5px;border-radius:3px;border:1px solid '+rc2+'40;color:'+rc2+'">'+(o.role||'user').toUpperCase()+'</span></td>';ur+='<td class="hide-xs" style="font-size:12px;color:var(--textdim)">'+esc(o.org_name||'—')+'</td>';
+        var rc2=o.role==='supervisor'?'var(--amber)':'var(--cyan)';
+        ur+='<td><span style="font-family:monospace;font-size:9px;padding:2px 5px;border-radius:3px;border:1px solid '+rc2+'40;color:'+rc2+'">'+(o.role||'user').toUpperCase()+'</span></td>';
+        ur+='<td class="hide-xs" style="font-size:12px;color:var(--textdim)">'+esc(o.org_name||'—')+'</td>';
         ur+='<td>'+statusBadge(o.location_status)+'</td>';
         ur+='<td style="font-family:var(--mono);color:var(--amber)">'+(o.visits_today||0)+'</td>';
         ur+='<td class="hide-xs" style="font-size:11px;color:var(--textdim)">'+fmtRelative(o.last_seen)+'</td>';
